@@ -83,9 +83,13 @@ impl RainSimulation {
             char_count += 1;
         }
 
+        // Randomize spawn Y across entire virtual area (3x height)
+        let random_spawn_offset = self.rng.gen_range(0..=(self.height as i32 * 3));
+        let spawn_y = -(self.height as i32) + random_spawn_offset;
+
         self.raindrops.push(Raindrop {
             x,
-            y: -(self.height as i32),
+            y: spawn_y,
             length,
             speed,
             chars,
