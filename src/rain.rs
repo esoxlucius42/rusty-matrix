@@ -9,7 +9,7 @@ pub struct Raindrop {
     pub y: i32,
     pub length: usize,
     pub speed: f32,
-    pub chars: [char; 32],
+    pub chars: [char; 80],
     pub char_count: usize,
 }
 
@@ -32,12 +32,12 @@ fn get_charset() -> Vec<char> {
 
 // Regenerate character chain for recycled raindrops
 fn regenerate_chars(raindrop: &mut Raindrop, charset: &[char], rng: &mut rand::rngs::ThreadRng) {
-    raindrop.chars = [' '; 32];
+    raindrop.chars = [' '; 80];
     raindrop.char_count = 0;
-    let new_length = rng.gen_range(10..30);
+    let new_length = rng.gen_range(42..70);
     raindrop.length = new_length;
     
-    for _ in 0..new_length.min(32) {
+    for _ in 0..new_length.min(80) {
         let char_idx = rng.gen_range(0..charset.len());
         raindrop.chars[raindrop.char_count] = charset[char_idx];
         raindrop.char_count += 1;
@@ -67,7 +67,7 @@ impl RainSimulation {
     }
 
     fn create_raindrop(&mut self, x: usize) {
-        let length = self.rng.gen_range(10..30);
+        let length = self.rng.gen_range(42..70);
         
         // Weighted speed distribution: biased toward faster speeds
         // Sum of two ranges (2.0-4.0 + 0.0-1.0) = 2.0-5.0 with higher average
@@ -75,9 +75,9 @@ impl RainSimulation {
         let boost = self.rng.gen_range(0.0..1.0);
         let speed = base_speed + boost;
 
-        let mut chars = [' '; 32];
+        let mut chars = [' '; 80];
         let mut char_count = 0;
-        for _ in 0..length.min(32) {
+        for _ in 0..length.min(80) {
             let char_idx = self.rng.gen_range(0..self.charset.len());
             chars[char_count] = self.charset[char_idx];
             char_count += 1;
