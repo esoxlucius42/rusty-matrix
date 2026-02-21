@@ -225,6 +225,7 @@ pub struct Renderer {
     rain_uniforms_buffer: wgpu::Buffer,
     compute_bind_group: wgpu::BindGroup,
     render_bind_group: wgpu::BindGroup,
+    frame_count: u32,
 }
 
 impl Renderer {
@@ -477,39 +478,26 @@ impl Renderer {
             ],
         });
 
-        // Create simple triangle geometry for testing
-        let vertices = vec![
-            Vertex {
-                position: [-0.5, -0.5],
-                uv: [0.0, 0.0],
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [0.5, -0.5],
-                uv: [1.0, 0.0],
-                color: [0.0, 1.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [0.0, 0.5],
-                uv: [0.5, 1.0],
-                color: [0.0, 0.0, 1.0, 1.0],
-            },
-        ];
+        // Create empty vertex and index buffers with COPY_DST for dynamic updates
+        const MAX_VERTICES: usize = 11520; // Max expected for 80 columns × 20 chars/drop × 6 vertices/quad
+        const MAX_INDICES: usize = 17280;  // Max expected indices for above
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
+            size: (MAX_VERTICES * std::mem::size_of::<Vertex>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
-        let indices = vec![0u32, 1, 2];
-        let num_indices = indices.len() as u32;
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
+            size: (MAX_INDICES * std::mem::size_of::<u32>()) as u64,
+            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
+
+        // Start with 0 indices (will update each frame)
+        let num_indices = 0u32;
 
         Self {
             surface,
@@ -528,10 +516,35 @@ impl Renderer {
             rain_uniforms_buffer,
             compute_bind_group,
             render_bind_group,
+            frame_count: 0,
         }
     }
 
-    pub fn render_frame(&mut self, _rain: &RainSimulation) -> Result<(), wgpu::SurfaceError> {
+    pub fn render_frame(&mut self, rain: &RainSimulation) -> Result<(), wgpu::SurfaceError> {
+        self.frame_count = self.frame_count.wrapping_add(1);
+
+        // Generate vertex data from rain simulation
+        let (vertices, indices) = rain.generate_vertex_data(&self.font_atlas.glyph_map);
+
+        // Write vertex data to GPU buffers
+        if !vertices.is_empty() {
+            self.queue.write_buffer(
+                &self.vertex_buffer,
+                0,
+                bytemuck::cast_slice(&vertices),
+            );
+        }
+
+        if !indices.is_empty() {
+            self.queue.write_buffer(
+                &self.index_buffer,
+                0,
+                bytemuck::cast_slice(&indices),
+            );
+        }
+
+        self.num_indices = indices.len() as u32;
+
         let output = self.surface.get_current_texture()?;
 
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -579,7 +592,9 @@ impl Renderer {
             render_pass.set_bind_group(0, &self.render_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            if self.num_indices > 0 {
+                render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
