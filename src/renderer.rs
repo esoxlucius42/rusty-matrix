@@ -9,6 +9,28 @@ use crate::rain::RainSimulation;
 const CHAR_WIDTH: f32 = 16.0;
 const CHAR_HEIGHT: f32 = 20.0;
 
+// GPU representation of a raindrop for compute shader
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct GPURadindrop {
+    pub x: f32,
+    pub y: f32,
+    pub speed: f32,
+    pub char_index: u32,
+    pub char_count: u32,
+    pub _padding: [u32; 2],
+}
+
+// Uniform data for compute shader
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct RainUniforms {
+    pub time: u32,
+    pub window_height: u32,
+    pub rain_count: u32,
+    pub _padding: u32,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct GlyphMetrics {
     pub u_min: f32,
@@ -193,11 +215,16 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
+    compute_pipeline: wgpu::ComputePipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     window: Arc<Window>,
     font_atlas: FontAtlas,
+    raindrops_buffer: wgpu::Buffer,
+    rain_uniforms_buffer: wgpu::Buffer,
+    compute_bind_group: wgpu::BindGroup,
+    render_bind_group: wgpu::BindGroup,
 }
 
 impl Renderer {
@@ -267,17 +294,98 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../shaders/shader.wgsl"))),
         });
 
-        // Create pipeline layout
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Pipeline Layout"),
-            bind_group_layouts: &[],
+        // Create bind group layouts
+        // Compute shader bind group (raindrops storage + uniforms)
+        let compute_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Compute Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        // Render shader bind group (texture + sampler)
+        let render_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Render Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Create samplers
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Glyph Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 1.0,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
+        });
+
+        // Create pipeline layouts
+        let compute_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute Pipeline Layout"),
+            bind_group_layouts: &[&compute_bind_group_layout],
             push_constant_ranges: &[],
+        });
+
+        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[&render_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        // Create compute pipeline
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Compute Pipeline"),
+            layout: Some(&compute_pipeline_layout),
+            module: &shader,
+            entry_point: "cs_update_rain",
         });
 
         // Create render pipeline
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
+            layout: Some(&render_pipeline_layout),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
@@ -321,7 +429,55 @@ impl Renderer {
             multiview: None,
         });
 
-        // Create simple triangle geometry
+        // Create buffers for rain simulation
+        const MAX_RAINDROPS: usize = 1000;
+        let raindrops_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Raindrops Storage Buffer"),
+            size: (MAX_RAINDROPS * std::mem::size_of::<GPURadindrop>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let rain_uniforms_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Rain Uniforms Buffer"),
+            size: std::mem::size_of::<RainUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create compute bind group
+        let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Compute Bind Group"),
+            layout: &compute_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: raindrops_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: rain_uniforms_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Create render bind group
+        let render_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Render Bind Group"),
+            layout: &render_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&font_atlas.texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        // Create simple triangle geometry for testing
         let vertices = vec![
             Vertex {
                 position: [-0.5, -0.5],
@@ -362,11 +518,16 @@ impl Renderer {
             config,
             size,
             render_pipeline,
+            compute_pipeline,
             vertex_buffer,
             index_buffer,
             num_indices,
             window,
             font_atlas,
+            raindrops_buffer,
+            rain_uniforms_buffer,
+            compute_bind_group,
+            render_bind_group,
         }
     }
 
@@ -380,6 +541,19 @@ impl Renderer {
                 label: Some("Render Encoder"),
             });
 
+        // Run compute shader to update rain
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Compute Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&self.compute_pipeline);
+            compute_pass.set_bind_group(0, &self.compute_bind_group, &[]);
+            // Dispatch with 256 threads per workgroup, assuming max 1000 raindrops
+            compute_pass.dispatch_workgroups((1000 + 255) / 256, 1, 1);
+        }
+
+        // Render pass
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -402,6 +576,7 @@ impl Renderer {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.render_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
