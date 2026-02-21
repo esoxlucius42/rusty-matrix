@@ -6,7 +6,7 @@ pub use crate::renderer::{GlyphMetrics, Vertex};
 #[derive(Clone, Copy, Debug)]
 pub struct Raindrop {
     pub x: usize,
-    pub y: usize,
+    pub y: i32,
     pub length: usize,
     pub speed: usize,
     pub chars: [char; 32],
@@ -17,6 +17,7 @@ pub struct RainSimulation {
     raindrops: Vec<Raindrop>,
     width: usize,
     height: usize,
+    virtual_height: usize,
     frame_count: u32,
     rng: rand::rngs::ThreadRng,
     charset: Vec<char>,
@@ -29,12 +30,27 @@ fn get_charset() -> Vec<char> {
         .collect()
 }
 
+// Regenerate character chain for recycled raindrops
+fn regenerate_chars(raindrop: &mut Raindrop, charset: &[char], rng: &mut rand::rngs::ThreadRng) {
+    raindrop.chars = [' '; 32];
+    raindrop.char_count = 0;
+    let new_length = rng.gen_range(10..30);
+    raindrop.length = new_length;
+    
+    for _ in 0..new_length.min(32) {
+        let char_idx = rng.gen_range(0..charset.len());
+        raindrop.chars[raindrop.char_count] = charset[char_idx];
+        raindrop.char_count += 1;
+    }
+}
+
 impl RainSimulation {
     pub fn new(width: usize, height: usize) -> Self {
         let mut sim = Self {
             raindrops: Vec::new(),
             width,
             height,
+            virtual_height: height * 3,
             frame_count: 0,
             rng: rand::thread_rng(),
             charset: get_charset(),
@@ -44,7 +60,7 @@ impl RainSimulation {
     }
 
     fn spawn_raindrops(&mut self) {
-        // Create initial raindrops across the width
+        // Create initial raindrops across the width, starting above screen
         for x in (0..self.width).step_by(20) {
             self.create_raindrop(x);
         }
@@ -64,7 +80,7 @@ impl RainSimulation {
 
         self.raindrops.push(Raindrop {
             x,
-            y: 0,
+            y: -(self.height as i32 * 2),
             length,
             speed,
             chars,
@@ -81,33 +97,24 @@ impl RainSimulation {
             }
         }
 
-        // Remove raindrops that are off screen and create new ones
-        let mut i = 0;
-        while i < self.raindrops.len() {
-            if self.raindrops[i].y > self.height + self.raindrops[i].length {
-                self.raindrops.remove(i);
-            } else {
-                i += 1;
+        // Recycle raindrops that exit bottom of screen (not removal)
+        for raindrop in &mut self.raindrops {
+            if raindrop.y > self.height as i32 {
+                // Recycle: reset to top of virtual area and randomize
+                raindrop.y = -(self.height as i32 * 2);
+                raindrop.x = self.rng.gen_range(0..self.width);
+                regenerate_chars(raindrop, &self.charset, &mut self.rng);
             }
-        }
-
-        // Spawn new raindrops occasionally
-        if self.frame_count % 5 == 0 && self.raindrops.len() < (self.width / 15) {
-            let x = self.rng.gen_range(0..self.width);
-            self.create_raindrop(x);
         }
     }
 
     pub fn resize(&mut self, width: usize, height: usize) {
         self.width = width;
         self.height = height;
+        self.virtual_height = height * 3;
         self.raindrops.clear();
         self.charset = get_charset();
         self.spawn_raindrops();
-    }
-
-    pub fn raindrops(&self) -> &[Raindrop] {
-        &self.raindrops
     }
 
     pub fn generate_vertex_data(
@@ -144,7 +151,7 @@ impl RainSimulation {
                 // Calculate Y position for this character
                 let char_y = raindrop.y as f32 - (char_idx as f32 * 16.0);
 
-                // Skip if off-screen
+                // Skip if off-screen (with padding for smooth culling)
                 if char_y < -50.0 || char_y > height_f32 + 50.0 {
                     continue;
                 }

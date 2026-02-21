@@ -1,14 +1,10 @@
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::font_atlas::EmbeddedAtlas;
 use crate::rain::RainSimulation;
-
-const CHAR_WIDTH: f32 = 16.0;
-const CHAR_HEIGHT: f32 = 20.0;
 
 // GPU representation of a raindrop for compute shader
 #[repr(C)]
@@ -43,11 +39,15 @@ pub struct GlyphMetrics {
 }
 
 pub struct FontAtlas {
+    #[allow(dead_code)]
     pub texture: wgpu::Texture,
     pub texture_view: wgpu::TextureView,
     pub glyph_map: HashMap<char, GlyphMetrics>,
+    #[allow(dead_code)]
     pub font_size: u32,
+    #[allow(dead_code)]
     pub atlas_width: u32,
+    #[allow(dead_code)]
     pub atlas_height: u32,
 }
 
@@ -176,11 +176,14 @@ pub struct Renderer {
     num_indices: u32,
     window: Arc<Window>,
     font_atlas: FontAtlas,
+    #[allow(dead_code)]
     raindrops_buffer: wgpu::Buffer,
+    #[allow(dead_code)]
     rain_uniforms_buffer: wgpu::Buffer,
     compute_bind_group: wgpu::BindGroup,
     render_bind_group: wgpu::BindGroup,
     frame_count: u32,
+    #[allow(dead_code)]
     surface_needs_recreation: bool,
 }
 
@@ -594,11 +597,13 @@ impl Renderer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn mark_surface_for_recreation(&mut self) {
         self.surface_needs_recreation = true;
         eprintln!("[Renderer] Surface marked for recreation on next render");
     }
 
+    #[allow(dead_code)]
     pub fn needs_surface_recreation(&self) -> bool {
         self.surface_needs_recreation
     }
