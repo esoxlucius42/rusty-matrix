@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use winit::window::Window;
-use winit::event::{Event, WindowEvent, KeyEvent, ElementState};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::EventLoopWindowTarget;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use winit::window::Window;
 
-use crate::renderer::Renderer;
 use crate::rain::RainSimulation;
+use crate::renderer::Renderer;
 
 const TARGET_FPS: f32 = 75.0;
 const TARGET_FRAME_TIME: Duration = Duration::from_micros((1_000_000.0 / TARGET_FPS) as u64);
@@ -33,11 +33,7 @@ impl App {
         }
     }
 
-    pub fn handle_event(
-        &mut self,
-        event: &Event<()>,
-        target: &EventLoopWindowTarget<()>,
-    ) {
+    pub fn handle_event(&mut self, event: &Event<()>, target: &EventLoopWindowTarget<()>) {
         match event {
             Event::WindowEvent {
                 window_id: _,
@@ -52,11 +48,7 @@ impl App {
         }
     }
 
-    fn handle_window_event(
-        &mut self,
-        event: &WindowEvent,
-        target: &EventLoopWindowTarget<()>,
-    ) {
+    fn handle_window_event(&mut self, event: &WindowEvent, target: &EventLoopWindowTarget<()>) {
         match event {
             WindowEvent::CloseRequested => {
                 target.exit();

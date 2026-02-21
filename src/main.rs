@@ -1,7 +1,7 @@
-mod gui;
-mod renderer;
-mod rain;
 mod events;
+mod gui;
+mod rain;
+mod renderer;
 
 use std::sync::Arc;
 use winit::event_loop::EventLoop;

@@ -1,8 +1,8 @@
-use wgpu::util::DeviceExt;
+use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 use std::sync::Arc;
+use wgpu::util::DeviceExt;
 use winit::window::Window;
-use bytemuck::{Pod, Zeroable};
 
 use crate::rain::RainSimulation;
 
@@ -100,14 +100,15 @@ impl FontAtlas {
         let mut current_y = 4u32;
         let glyph_width = 16u32;
         let glyph_height = 16u32;
-        let chars_to_render = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
+        let chars_to_render =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
 
         for ch in chars_to_render.chars() {
             // Create simple box glyph
             if current_x + glyph_width + 4 > ATLAS_WIDTH {
                 current_x = 4;
                 current_y += glyph_height + 4;
-                
+
                 if current_y + glyph_height + 4 > ATLAS_HEIGHT {
                     break;
                 }
@@ -119,17 +120,17 @@ impl FontAtlas {
                     let dst_x = current_x + x;
                     let dst_y = current_y + y;
                     let dst_idx = ((dst_y * ATLAS_WIDTH + dst_x) * 4) as usize;
-                    
+
                     // Draw white rectangle with semi-transparent interior
-                    atlas_data[dst_idx] = 255;     // R
+                    atlas_data[dst_idx] = 255; // R
                     atlas_data[dst_idx + 1] = 255; // G
                     atlas_data[dst_idx + 2] = 255; // B
-                    
+
                     // Add alpha gradient for antialiasing effect
                     let alpha = if x < 2 || x >= glyph_width - 2 || y < 2 || y >= glyph_height - 2 {
-                        200  // Border: more opaque
+                        200 // Border: more opaque
                     } else {
-                        150  // Interior: less opaque
+                        150 // Interior: less opaque
                     };
                     atlas_data[dst_idx + 3] = alpha;
                 }
@@ -156,7 +157,10 @@ impl FontAtlas {
             current_x += glyph_width + 4;
         }
 
-        eprintln!("Font atlas created with {} placeholder glyphs", glyph_map.len());
+        eprintln!(
+            "Font atlas created with {} placeholder glyphs",
+            glyph_map.len()
+        );
 
         // Create GPU texture
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -292,59 +296,63 @@ impl Renderer {
         // Create shader module
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../shaders/shader.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                "../shaders/shader.wgsl"
+            ))),
         });
 
         // Create bind group layouts
         // Compute shader bind group (raindrops storage + uniforms)
-        let compute_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Compute Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let compute_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Compute Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                ],
+            });
 
         // Render shader bind group (texture + sampler)
-        let render_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Render Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+        let render_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Render Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         // Create samplers
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -363,17 +371,19 @@ impl Renderer {
         });
 
         // Create pipeline layouts
-        let compute_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute Pipeline Layout"),
-            bind_group_layouts: &[&compute_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let compute_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Compute Pipeline Layout"),
+                bind_group_layouts: &[&compute_bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[&render_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&render_bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         // Create compute pipeline
         let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -480,7 +490,7 @@ impl Renderer {
 
         // Create empty vertex and index buffers with COPY_DST for dynamic updates
         const MAX_VERTICES: usize = 11520; // Max expected for 80 columns × 20 chars/drop × 6 vertices/quad
-        const MAX_INDICES: usize = 17280;  // Max expected indices for above
+        const MAX_INDICES: usize = 17280; // Max expected indices for above
 
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Vertex Buffer"),
@@ -528,28 +538,25 @@ impl Renderer {
 
         // Write vertex data to GPU buffers
         if !vertices.is_empty() {
-            self.queue.write_buffer(
-                &self.vertex_buffer,
-                0,
-                bytemuck::cast_slice(&vertices),
-            );
+            self.queue
+                .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
         }
 
         if !indices.is_empty() {
-            self.queue.write_buffer(
-                &self.index_buffer,
-                0,
-                bytemuck::cast_slice(&indices),
-            );
+            self.queue
+                .write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
         }
 
         self.num_indices = indices.len() as u32;
 
         let output = self.surface.get_current_texture()?;
 
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.device
+        let mut encoder = self
+            .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });

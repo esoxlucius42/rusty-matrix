@@ -1,7 +1,7 @@
 use rand::Rng;
 
 // Re-export for use in renderer
-pub use crate::renderer::{Vertex, GlyphMetrics};
+pub use crate::renderer::{GlyphMetrics, Vertex};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Raindrop {
@@ -122,7 +122,7 @@ impl RainSimulation {
 
                 // Calculate Y position for this character
                 let char_y = raindrop.y as f32 - (char_idx as f32 * 16.0);
-                
+
                 // Skip if off-screen
                 if char_y < -50.0 || char_y > height_f32 + 50.0 {
                     continue;
