@@ -21,6 +21,7 @@ pub struct RainSimulation {
     frame_count: u32,
     rng: rand::rngs::ThreadRng,
     charset: Vec<char>,
+    last_animation_frame: u32,
 }
 
 // Half-width katakana: U+FF66 to U+FF9D (58 characters)
@@ -54,6 +55,7 @@ impl RainSimulation {
             frame_count: 0,
             rng: rand::thread_rng(),
             charset: get_charset(),
+            last_animation_frame: 0,
         };
         sim.spawn_raindrops();
         sim
@@ -97,6 +99,28 @@ impl RainSimulation {
         });
     }
 
+    fn animate_glyphs(&mut self) {
+        // Animate glyphs every 60 frames (1 second at 60 FPS)
+        if self.frame_count - self.last_animation_frame >= 60 {
+            self.last_animation_frame = self.frame_count;
+
+            // Animate all raindrops
+            for raindrop in &mut self.raindrops {
+                // Shift glyphs down: move each glyph to the next position
+                // Iterate backwards to avoid overwriting values we need
+                for i in (1..raindrop.char_count).rev() {
+                    raindrop.chars[i] = raindrop.chars[i - 1];
+                }
+
+                // Generate new random glyph at head (position 0)
+                if raindrop.char_count > 0 {
+                    let char_idx = self.rng.gen_range(0..self.charset.len());
+                    raindrop.chars[0] = self.charset[char_idx];
+                }
+            }
+        }
+    }
+
     pub fn update(&mut self) {
         self.frame_count = self.frame_count.wrapping_add(1);
 
@@ -104,6 +128,9 @@ impl RainSimulation {
             // Direct pixel movement per frame, weighted toward faster speeds
             raindrop.y += raindrop.speed as i32;
         }
+
+        // Animate glyphs (shift them down the chain every second)
+        self.animate_glyphs();
 
         // Recycle raindrops that exit bottom of screen (not removal)
         for raindrop in &mut self.raindrops {
