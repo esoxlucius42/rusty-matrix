@@ -162,6 +162,8 @@ impl FontAtlas {
 }
 
 pub struct Renderer {
+    instance: wgpu::Instance,
+    adapter: wgpu::Adapter,
     surface: wgpu::Surface<'static>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -179,6 +181,7 @@ pub struct Renderer {
     compute_bind_group: wgpu::BindGroup,
     render_bind_group: wgpu::BindGroup,
     frame_count: u32,
+    surface_needs_recreation: bool,
 }
 
 impl Renderer {
@@ -459,6 +462,8 @@ impl Renderer {
         let num_indices = 0u32;
 
         Self {
+            instance,
+            adapter,
             surface,
             device,
             queue,
@@ -476,6 +481,7 @@ impl Renderer {
             compute_bind_group,
             render_bind_group,
             frame_count: 0,
+            surface_needs_recreation: false,
         }
     }
 
@@ -498,7 +504,28 @@ impl Renderer {
 
         self.num_indices = indices.len() as u32;
 
-        let output = self.surface.get_current_texture()?;
+        // Try to get current texture, handling surface state changes
+        let output = match self.surface.get_current_texture() {
+            Ok(texture) => texture,
+            Err(wgpu::SurfaceError::Lost) => {
+                eprintln!("[Renderer] Surface lost, recreating...");
+                self.recreate_surface();
+                // Try again after recreating
+                self.surface.get_current_texture()?
+            }
+            Err(e) => {
+                eprintln!("[Renderer] Surface error: {:?}", e);
+                // Check if this looks like a surface state issue
+                if e.to_string().contains("underlying surface has changed") {
+                    eprintln!("[Renderer] Detected surface state change, recreating surface...");
+                    self.recreate_surface();
+                    // Try again after recreating
+                    self.surface.get_current_texture()?
+                } else {
+                    return Err(e);
+                }
+            }
+        };
 
         let view = output
             .texture
@@ -567,8 +594,38 @@ impl Renderer {
         }
     }
 
+    pub fn mark_surface_for_recreation(&mut self) {
+        self.surface_needs_recreation = true;
+        eprintln!("[Renderer] Surface marked for recreation on next render");
+    }
+
+    pub fn needs_surface_recreation(&self) -> bool {
+        self.surface_needs_recreation
+    }
+
+    pub fn recreate_surface(&mut self) {
+        // Recreate the surface - necessary when window state changes (e.g., fullscreen toggle)
+        match self.instance.create_surface(self.window.clone()) {
+            Ok(new_surface) => {
+                self.surface = new_surface;
+                // Get updated capabilities for the new surface
+                let capabilities = self.surface.get_capabilities(&self.adapter);
+                // Update config format if needed (shouldn't change, but be safe)
+                self.config.format = capabilities.formats[0];
+                // Configure the new surface
+                self.surface.configure(&self.device, &self.config);
+                eprintln!("[Renderer] Surface recreated successfully for new window state");
+                self.surface_needs_recreation = false;
+            }
+            Err(e) => {
+                eprintln!("[Renderer] Failed to recreate surface: {:?}", e);
+            }
+        }
+    }
+
     pub fn on_window_resized(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.size = new_size;
-        self.resize_framebuffers();
+        // Recreate surface on resize to handle fullscreen transitions
+        self.recreate_surface();
     }
 }
