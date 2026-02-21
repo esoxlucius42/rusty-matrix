@@ -117,8 +117,8 @@ impl RainSimulation {
     }
 
     fn animate_midchain(&mut self) {
-        // Change random mid-chain glyphs once per second (every 60 frames at 60 FPS)
-        if self.frame_count - self.last_midchain_frame >= 60 {
+        // Change random mid-chain glyphs 10 times per second (every 6 frames at 60 FPS)
+        if self.frame_count - self.last_midchain_frame >= 6 {
             self.last_midchain_frame = self.frame_count;
 
             if self.raindrops.is_empty() {
