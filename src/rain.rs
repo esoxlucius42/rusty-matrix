@@ -19,9 +19,15 @@ pub struct RainSimulation {
     height: usize,
     frame_count: u32,
     rng: rand::rngs::ThreadRng,
+    charset: Vec<char>,
 }
 
-const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+// Half-width katakana: U+FF66 to U+FF9D (58 characters)
+fn get_charset() -> Vec<char> {
+    (0xFF66..=0xFF9D)
+        .filter_map(char::from_u32)
+        .collect()
+}
 
 impl RainSimulation {
     pub fn new(width: usize, height: usize) -> Self {
@@ -31,6 +37,7 @@ impl RainSimulation {
             height,
             frame_count: 0,
             rng: rand::thread_rng(),
+            charset: get_charset(),
         };
         sim.spawn_raindrops();
         sim
@@ -50,8 +57,8 @@ impl RainSimulation {
         let mut chars = [' '; 32];
         let mut char_count = 0;
         for _ in 0..length.min(32) {
-            let char_idx = self.rng.gen_range(0..CHARSET.len());
-            chars[char_count] = CHARSET.chars().nth(char_idx).unwrap_or('a');
+            let char_idx = self.rng.gen_range(0..self.charset.len());
+            chars[char_count] = self.charset[char_idx];
             char_count += 1;
         }
 
@@ -95,6 +102,7 @@ impl RainSimulation {
         self.width = width;
         self.height = height;
         self.raindrops.clear();
+        self.charset = get_charset();
         self.spawn_raindrops();
     }
 

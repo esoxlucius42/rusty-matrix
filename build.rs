@@ -10,8 +10,10 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let atlas_path = Path::new(&out_dir).join("font_atlas.rs");
 
-    // Half-width katakana A-Z charset from rain.rs
-    let charset = "ﾊﾐﾋｰｳﾆｻﾓﾗﾔﾏﾁﾜﾂｦﾘﾅﾎﾈﾌﾛﾇﾍﾑﾀﾄ";
+    // Half-width katakana: U+FF66 to U+FF9D (58 characters)
+    let charset: String = (0xFF66..=0xFF9D)
+        .filter_map(char::from_u32)
+        .collect();
 
     // Load font
     let font_data = std::fs::read(font_path).expect("Failed to read font file");
