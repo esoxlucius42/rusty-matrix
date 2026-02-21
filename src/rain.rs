@@ -8,7 +8,7 @@ pub struct Raindrop {
     pub x: usize,
     pub y: i32,
     pub length: usize,
-    pub speed: usize,
+    pub speed: f32,
     pub chars: [char; 32],
     pub char_count: usize,
 }
@@ -68,7 +68,12 @@ impl RainSimulation {
 
     fn create_raindrop(&mut self, x: usize) {
         let length = self.rng.gen_range(10..30);
-        let speed = self.rng.gen_range(1..4);
+        
+        // Weighted speed distribution: biased toward faster speeds
+        // Sum of two ranges (5.0-10.0 + 0.0-5.0) = 5.0-15.0 with higher average
+        let base_speed = self.rng.gen_range(5.0..10.0);
+        let boost = self.rng.gen_range(0.0..5.0);
+        let speed = base_speed + boost;
 
         let mut chars = [' '; 32];
         let mut char_count = 0;
@@ -92,9 +97,8 @@ impl RainSimulation {
         self.frame_count = self.frame_count.wrapping_add(1);
 
         for raindrop in &mut self.raindrops {
-            if self.frame_count % (5 - raindrop.speed.min(4)) as u32 == 0 {
-                raindrop.y += 1;
-            }
+            // Direct pixel movement per frame, weighted toward faster speeds
+            raindrop.y += raindrop.speed as i32;
         }
 
         // Recycle raindrops that exit bottom of screen (not removal)
