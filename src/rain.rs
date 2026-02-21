@@ -100,8 +100,8 @@ impl RainSimulation {
     }
 
     fn animate_glyphs(&mut self) {
-        // Animate glyphs every 60 frames (1 second at 60 FPS)
-        if self.frame_count - self.last_animation_frame >= 60 {
+        // Animate glyphs every 12 frames (5x per second at 60 FPS)
+        if self.frame_count - self.last_animation_frame >= 12 {
             self.last_animation_frame = self.frame_count;
 
             // Animate all raindrops
