@@ -11,6 +11,7 @@ pub struct Raindrop {
     pub speed: f32,
     pub chars: [char; 80],
     pub char_count: usize,
+    pub last_midchain_frame: u32,
 }
 
 pub struct RainSimulation {
@@ -22,7 +23,6 @@ pub struct RainSimulation {
     rng: rand::rngs::ThreadRng,
     charset: Vec<char>,
     last_animation_frame: u32,
-    last_midchain_frame: u32,
 }
 
 // Half-width katakana: U+FF66 to U+FF9D (58 characters)
@@ -36,6 +36,7 @@ fn get_charset() -> Vec<char> {
 fn regenerate_chars(raindrop: &mut Raindrop, charset: &[char], rng: &mut rand::rngs::ThreadRng) {
     raindrop.chars = [' '; 80];
     raindrop.char_count = 0;
+    raindrop.last_midchain_frame = 0;
     let new_length = rng.gen_range(42..70);
     raindrop.length = new_length;
     
@@ -57,7 +58,6 @@ impl RainSimulation {
             rng: rand::thread_rng(),
             charset: get_charset(),
             last_animation_frame: 0,
-            last_midchain_frame: 0,
         };
         sim.spawn_raindrops();
         sim
@@ -98,6 +98,7 @@ impl RainSimulation {
             speed,
             chars,
             char_count,
+            last_midchain_frame: 0,
         });
     }
 
@@ -117,45 +118,39 @@ impl RainSimulation {
     }
 
     fn animate_midchain(&mut self) {
-        // Change random mid-chain glyphs 10 times per second (every 6 frames at 60 FPS)
-        if self.frame_count - self.last_midchain_frame >= 6 {
-            self.last_midchain_frame = self.frame_count;
-
-            if self.raindrops.is_empty() {
-                return;
-            }
-
-            // Select a random raindrop
-            let raindrop_idx = self.rng.gen_range(0..self.raindrops.len());
-            let raindrop = &mut self.raindrops[raindrop_idx];
-
-            if raindrop.char_count <= 1 {
-                // No mid-chain characters to animate (only head or empty)
-                return;
-            }
-
-            // Find all visible mid-chain positions (excluding head at position 0)
-            let height_f32 = self.height as f32;
-            let mut visible_positions = Vec::new();
-
-            for char_idx in 1..raindrop.char_count {
-                let char_y = raindrop.y as f32 - (char_idx as f32 * 32.0);
-                // Same visibility check as renderer (line 185)
-                if char_y >= -50.0 && char_y <= height_f32 + 50.0 {
-                    visible_positions.push(char_idx);
+        let height_f32 = self.height as f32;
+        
+        // Each raindrop independently animates its mid-chain glyphs 10 times per second
+        for raindrop in &mut self.raindrops {
+            // Check if this raindrop's animation counter has reached 6 frames
+            if self.frame_count - raindrop.last_midchain_frame >= 6 {
+                raindrop.last_midchain_frame = self.frame_count;
+                
+                if raindrop.char_count <= 1 {
+                    // No mid-chain characters to animate (only head or empty)
+                    continue;
                 }
-            }
-
-            // If there are visible mid-chain glyphs, change one randomly
-            if !visible_positions.is_empty() {
-                let pos_idx = self.rng.gen_range(0..visible_positions.len());
-                let char_pos = visible_positions[pos_idx];
-                let char_idx = self.rng.gen_range(0..self.charset.len());
-                raindrop.chars[char_pos] = self.charset[char_idx];
+                
+                // Find all visible mid-chain positions (excluding head at position 0)
+                let mut visible_positions = Vec::new();
+                for char_idx in 1..raindrop.char_count {
+                    let char_y = raindrop.y as f32 - (char_idx as f32 * 32.0);
+                    // Same visibility check as renderer
+                    if char_y >= -50.0 && char_y <= height_f32 + 50.0 {
+                        visible_positions.push(char_idx);
+                    }
+                }
+                
+                // If there are visible mid-chain glyphs, change one randomly
+                if !visible_positions.is_empty() {
+                    let pos_idx = self.rng.gen_range(0..visible_positions.len());
+                    let char_pos = visible_positions[pos_idx];
+                    let char_idx = self.rng.gen_range(0..self.charset.len());
+                    raindrop.chars[char_pos] = self.charset[char_idx];
+                }
             }
         }
     }
-
 
     pub fn update(&mut self) {
         self.frame_count = self.frame_count.wrapping_add(1);
