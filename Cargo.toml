@@ -5,12 +5,16 @@ edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.14", features = ["derive"] }
-fontdue = "0.4"
+image = "0.24"
 naga = { version = "0.19", features = ["wgsl-in"] }
 pollster = "0.3"
 rand = "0.8"
 wgpu = "0.19"
 winit = "0.29"
+
+[build-dependencies]
+ab_glyph = "0.2"
+image = "0.24"
 
 [profile.release]
 opt-level = 3

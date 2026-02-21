@@ -1,4 +1,5 @@
 mod events;
+mod font_atlas;
 mod gui;
 mod rain;
 mod renderer;

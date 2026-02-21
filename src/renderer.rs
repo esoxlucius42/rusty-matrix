@@ -4,6 +4,7 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use winit::window::Window;
 
+use crate::font_atlas::EmbeddedAtlas;
 use crate::rain::RainSimulation;
 
 const CHAR_WIDTH: f32 = 16.0;
@@ -86,79 +87,27 @@ impl Vertex {
 
 impl FontAtlas {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
-        const FONT_SIZE: u32 = 16;
         const ATLAS_WIDTH: u32 = 2048;
         const ATLAS_HEIGHT: u32 = 2048;
+        const FONT_SIZE: u32 = 16;
 
-        // Create atlas bitmap (RGBA, black background with simple placeholder glyphs)
-        let mut atlas_data = vec![0u8; (ATLAS_WIDTH * ATLAS_HEIGHT * 4) as usize];
-        let mut glyph_map = HashMap::new();
+        // Load embedded PNG atlas
+        let embedded = EmbeddedAtlas::new();
+        
+        // Decode PNG to image buffer
+        let img = image::load_from_memory_with_format(
+            embedded.png_data,
+            image::ImageFormat::Png,
+        ).expect("Failed to decode embedded PNG atlas");
+        
+        let rgba_img = img.to_rgba8();
+        let atlas_data = rgba_img.to_vec();
 
-        // For now, create simple placeholder glyphs (rectangles) instead of loading the TTF
-        // This avoids the fontdue panic issue while maintaining the texture pipeline
-        let mut current_x = 4u32;
-        let mut current_y = 4u32;
-        let glyph_width = 16u32;
-        let glyph_height = 16u32;
-        let chars_to_render =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()";
-
-        for ch in chars_to_render.chars() {
-            // Create simple box glyph
-            if current_x + glyph_width + 4 > ATLAS_WIDTH {
-                current_x = 4;
-                current_y += glyph_height + 4;
-
-                if current_y + glyph_height + 4 > ATLAS_HEIGHT {
-                    break;
-                }
-            }
-
-            // Draw a simple filled rectangle as placeholder
-            for y in 0..glyph_height {
-                for x in 0..glyph_width {
-                    let dst_x = current_x + x;
-                    let dst_y = current_y + y;
-                    let dst_idx = ((dst_y * ATLAS_WIDTH + dst_x) * 4) as usize;
-
-                    // Draw white rectangle with semi-transparent interior
-                    atlas_data[dst_idx] = 255; // R
-                    atlas_data[dst_idx + 1] = 255; // G
-                    atlas_data[dst_idx + 2] = 255; // B
-
-                    // Add alpha gradient for antialiasing effect
-                    let alpha = if x < 2 || x >= glyph_width - 2 || y < 2 || y >= glyph_height - 2 {
-                        200 // Border: more opaque
-                    } else {
-                        150 // Interior: less opaque
-                    };
-                    atlas_data[dst_idx + 3] = alpha;
-                }
-            }
-
-            // Store glyph metrics (UV coordinates normalized to 0..1)
-            let u_min = current_x as f32 / ATLAS_WIDTH as f32;
-            let v_min = current_y as f32 / ATLAS_HEIGHT as f32;
-            let u_max = (current_x + glyph_width) as f32 / ATLAS_WIDTH as f32;
-            let v_max = (current_y + glyph_height) as f32 / ATLAS_HEIGHT as f32;
-
-            glyph_map.insert(
-                ch,
-                GlyphMetrics {
-                    u_min,
-                    v_min,
-                    u_max,
-                    v_max,
-                    width: glyph_width,
-                    height: glyph_height,
-                },
-            );
-
-            current_x += glyph_width + 4;
-        }
+        // Use the glyph map from the embedded atlas
+        let glyph_map = embedded.glyph_coordinates;
 
         eprintln!(
-            "Font atlas created with {} placeholder glyphs",
+            "Font atlas loaded from PNG with {} glyphs",
             glyph_map.len()
         );
 
