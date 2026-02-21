@@ -107,7 +107,9 @@ impl RainSimulation {
 
         // Recycle raindrops that exit bottom of screen (not removal)
         for raindrop in &mut self.raindrops {
-            if raindrop.y > (self.height as i32 * 2) {
+            // Calculate tail position and recycle only when it exits bottom
+            let tail_y = raindrop.y - (raindrop.char_count as i32 * 32);
+            if tail_y > (self.height as i32 * 2) {
                 // Recycle: reset to top of virtual area and randomize
                 raindrop.y = -(self.height as i32);
                 raindrop.x = self.rng.gen_range(0..self.width);
