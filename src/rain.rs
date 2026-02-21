@@ -61,7 +61,7 @@ impl RainSimulation {
 
     fn spawn_raindrops(&mut self) {
         // Create initial raindrops across the width, starting above screen
-        for x in (0..self.width).step_by(20) {
+        for x in (0..self.width).step_by(40) {
             self.create_raindrop(x);
         }
     }
@@ -157,7 +157,7 @@ impl RainSimulation {
                 };
 
                 // Calculate Y position for this character
-                let char_y = raindrop.y as f32 - (char_idx as f32 * 16.0);
+                let char_y = raindrop.y as f32 - (char_idx as f32 * 32.0);
 
                 // Skip if off-screen (with padding for smooth culling)
                 if char_y < -50.0 || char_y > height_f32 + 50.0 {

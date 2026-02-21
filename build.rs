@@ -22,7 +22,7 @@ fn main() {
     // Atlas configuration
     const ATLAS_WIDTH: u32 = 2048;
     const ATLAS_HEIGHT: u32 = 2048;
-    const GLYPH_SIZE: u32 = 16;
+    const GLYPH_SIZE: u32 = 32;
     const PADDING: u32 = 4;
 
     // Create atlas
