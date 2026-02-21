@@ -21,8 +21,8 @@ impl EmbeddedAtlas {
                 v_min,
                 u_max,
                 v_max,
-                width: 16,
-                height: 16,
+                width: 32,
+                height: 32,
             });
         }
         
