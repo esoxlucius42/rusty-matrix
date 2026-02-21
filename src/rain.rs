@@ -22,6 +22,7 @@ pub struct RainSimulation {
     rng: rand::rngs::ThreadRng,
     charset: Vec<char>,
     last_animation_frame: u32,
+    last_midchain_frame: u32,
 }
 
 // Half-width katakana: U+FF66 to U+FF9D (58 characters)
@@ -56,6 +57,7 @@ impl RainSimulation {
             rng: rand::thread_rng(),
             charset: get_charset(),
             last_animation_frame: 0,
+            last_midchain_frame: 0,
         };
         sim.spawn_raindrops();
         sim
@@ -100,8 +102,8 @@ impl RainSimulation {
     }
 
     fn animate_glyphs(&mut self) {
-        // Update head glyph every 5 frames (12x per second at 60 FPS)
-        if self.frame_count - self.last_animation_frame >= 5 {
+        // Update head glyph every 8 frames (~8x per second at 60 FPS)
+        if self.frame_count - self.last_animation_frame >= 8 {
             self.last_animation_frame = self.frame_count;
 
             // Update only the head glyph (position 0) for each raindrop
@@ -114,6 +116,47 @@ impl RainSimulation {
         }
     }
 
+    fn animate_midchain(&mut self) {
+        // Change random mid-chain glyphs once per second (every 60 frames at 60 FPS)
+        if self.frame_count - self.last_midchain_frame >= 60 {
+            self.last_midchain_frame = self.frame_count;
+
+            if self.raindrops.is_empty() {
+                return;
+            }
+
+            // Select a random raindrop
+            let raindrop_idx = self.rng.gen_range(0..self.raindrops.len());
+            let raindrop = &mut self.raindrops[raindrop_idx];
+
+            if raindrop.char_count <= 1 {
+                // No mid-chain characters to animate (only head or empty)
+                return;
+            }
+
+            // Find all visible mid-chain positions (excluding head at position 0)
+            let height_f32 = self.height as f32;
+            let mut visible_positions = Vec::new();
+
+            for char_idx in 1..raindrop.char_count {
+                let char_y = raindrop.y as f32 - (char_idx as f32 * 32.0);
+                // Same visibility check as renderer (line 185)
+                if char_y >= -50.0 && char_y <= height_f32 + 50.0 {
+                    visible_positions.push(char_idx);
+                }
+            }
+
+            // If there are visible mid-chain glyphs, change one randomly
+            if !visible_positions.is_empty() {
+                let pos_idx = self.rng.gen_range(0..visible_positions.len());
+                let char_pos = visible_positions[pos_idx];
+                let char_idx = self.rng.gen_range(0..self.charset.len());
+                raindrop.chars[char_pos] = self.charset[char_idx];
+            }
+        }
+    }
+
+
     pub fn update(&mut self) {
         self.frame_count = self.frame_count.wrapping_add(1);
 
@@ -122,8 +165,9 @@ impl RainSimulation {
             raindrop.y += raindrop.speed as i32;
         }
 
-        // Animate glyphs (shift them down the chain every second)
+        // Animate glyphs (update head and mid-chain)
         self.animate_glyphs();
+        self.animate_midchain();
 
         // Recycle raindrops that exit bottom of screen (not removal)
         for raindrop in &mut self.raindrops {
