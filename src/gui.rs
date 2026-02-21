@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use winit::window::Window;
 use winit::event::{Event, WindowEvent, KeyEvent, ElementState};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -7,10 +8,15 @@ use winit::event_loop::EventLoopWindowTarget;
 use crate::renderer::Renderer;
 use crate::rain::RainSimulation;
 
+const TARGET_FPS: f32 = 75.0;
+const TARGET_FRAME_TIME: Duration = Duration::from_micros((1_000_000.0 / TARGET_FPS) as u64);
+
 pub struct App {
     renderer: Option<Renderer>,
     rain: RainSimulation,
     window: Arc<Window>,
+    last_frame_time: Instant,
+    frame_count: u32,
 }
 
 impl App {
@@ -22,6 +28,8 @@ impl App {
             renderer: Some(renderer),
             rain,
             window,
+            last_frame_time: Instant::now(),
+            frame_count: 0,
         }
     }
 
@@ -90,6 +98,23 @@ impl App {
                 self.window.set_fullscreen(fullscreen);
             }
             WindowEvent::RedrawRequested => {
+                // Implement 75 FPS hard limiter
+                let now = Instant::now();
+                let elapsed = now.duration_since(self.last_frame_time);
+
+                if elapsed < TARGET_FRAME_TIME {
+                    let sleep_time = TARGET_FRAME_TIME - elapsed;
+                    std::thread::sleep(sleep_time);
+                }
+
+                let frame_start = Instant::now();
+                self.frame_count = self.frame_count.wrapping_add(1);
+
+                // Log FPS every 60 frames (approximately every 0.8 seconds at 75 FPS)
+                if self.frame_count % 60 == 0 {
+                    eprintln!("Frame: {}", self.frame_count);
+                }
+
                 self.rain.update();
                 if let Some(renderer) = &mut self.renderer {
                     match renderer.render_frame(&self.rain) {
@@ -105,6 +130,8 @@ impl App {
                         }
                     }
                 }
+
+                self.last_frame_time = frame_start;
             }
             _ => {}
         }
