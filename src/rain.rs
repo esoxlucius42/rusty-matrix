@@ -21,7 +21,7 @@ pub struct RainSimulation {
     rng: rand::rngs::ThreadRng,
 }
 
-const CHARSET: &str = "ﾊﾐﾋｰｳﾆｻﾓﾗﾔﾏﾗﾁﾔﾜﾂｦﾘﾅﾆﾁﾎﾓﾆﾊﾐﾊﾁﾈﾌﾆﾈﾊﾐﾊﾏﾁﾔﾆﾘｦﾊﾏﾓﾈﾓﾅﾔﾏﾛﾇﾎﾜﾘﾍﾑﾀﾘﾅﾑﾊﾐﾎﾀﾏﾂｻﾗﾊﾈﾌﾊﾓﾐﾈﾁﾋﾋﾄﾁﾎﾈﾐﾜﾀﾌﾐﾔﾏﾊﾄﾂﾊﾏﾁﾔﾃﾏﾊﾊﾆﾈﾊﾐﾎﾊﾏﾐﾋﾓﾋﾎﾌﾆﾔﾀｦﾐﾜﾇﾛﾛﾌﾍﾘﾓﾆﾘﾃﾌﾊﾀﾉﾎﾅﾑﾓﾓﾏﾗﾎﾏﾁﾊﾜﾃﾌﾓﾊﾊﾑﾈﾊﾂﾃﾌﾊﾁﾔﾀﾊﾂﾘﾏﾎﾊﾊﾌﾋﾉﾋﾀﾌﾜﾀﾀﾆﾈﾌﾔﾀﾘﾂﾔﾘﾌﾀﾆﾌﾄﾂﾋﾜﾉﾐﾈﾂﾂﾋﾄﾀﾏﾁﾜﾃﾌﾄﾂﾄﾀﾘﾋﾠﾏﾁﾀﾀﾏﾀﾇﾅﾄﾃﾀﾘﾆﾘﾄﾂﾊﾂﾅﾈﾂﾕﾜﾓﾘﾆﾊﾂﾜﾊﾃﾀﾍﾌﾜﾛﾕﾊ0123456789:・\"'.,-ﾞﾟ";
+const CHARSET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 impl RainSimulation {
     pub fn new(width: usize, height: usize) -> Self {
@@ -112,12 +112,25 @@ impl RainSimulation {
         let width_f32 = self.width as f32;
         let height_f32 = self.height as f32;
 
+        // Debug: count lookups and misses
+        let mut total_chars = 0;
+        let mut found_chars = 0;
+        let mut missed_chars = std::collections::HashSet::new();
+
         for raindrop in &self.raindrops {
             for (char_idx, &ch) in raindrop.chars[..raindrop.char_count].iter().enumerate() {
+                total_chars += 1;
+                
                 // Get glyph metrics
                 let glyph_metrics = match glyph_map.get(&ch) {
-                    Some(m) => m,
-                    None => continue, // Skip if glyph not available
+                    Some(m) => {
+                        found_chars += 1;
+                        m
+                    }
+                    None => {
+                        missed_chars.insert(ch);
+                        continue; // Skip if glyph not available
+                    }
                 };
 
                 // Calculate Y position for this character
@@ -196,6 +209,22 @@ impl RainSimulation {
                 indices.push(base_idx + 1);
                 indices.push(base_idx + 3);
                 indices.push(base_idx + 2);
+            }
+        }
+
+        // Debug output: show lookup statistics
+        if total_chars > 0 {
+            eprintln!(
+                "[Vertex Gen] Total chars: {}, Found: {}, Missed: {} ({:.1}% hit rate)",
+                total_chars,
+                found_chars,
+                missed_chars.len(),
+                (found_chars as f32 / total_chars as f32) * 100.0
+            );
+            if !missed_chars.is_empty() {
+                let mut missed_list: Vec<char> = missed_chars.into_iter().collect();
+                missed_list.sort();
+                eprintln!("[Vertex Gen] Missing chars: {:?}", missed_list);
             }
         }
 

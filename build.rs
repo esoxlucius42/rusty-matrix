@@ -10,8 +10,8 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let atlas_path = Path::new(&out_dir).join("font_atlas.rs");
 
-    // Katakana charset from rain.rs
-    let charset = "ﾊﾐﾋｰｳﾆｻﾓﾗﾔﾏﾗﾁﾔﾜﾂｦﾘﾅﾆﾁﾎﾓﾆﾊﾐﾊﾁﾈﾌﾆﾈﾊﾐﾊﾏﾁﾔﾆﾘｦﾊﾏﾓﾈﾓﾅﾔﾏﾛﾇﾎﾜﾘﾍﾑﾀﾘﾅﾑﾊﾐﾎﾀﾏﾂｻﾗﾊﾈﾌﾊﾓﾐﾈﾁﾋﾋﾄﾁﾎﾈﾐﾜﾀﾌﾐﾔﾏﾊﾄﾂﾊﾏﾁﾔﾃﾏﾊﾊﾆﾈﾊﾐﾎﾊﾏﾐﾋﾓﾋﾎﾌﾆﾔﾀｦﾐﾜﾇﾛﾛﾌﾍﾘﾓﾆﾘﾃﾌﾊﾀﾉﾎﾅﾑﾓﾓﾏﾗﾎﾏﾁﾊﾜﾃﾌﾓﾊﾊﾑﾈﾊﾂﾃﾌﾊﾁﾔﾀﾊﾂﾘﾏﾎﾊﾊﾌﾋﾉﾋﾀﾌﾜﾀﾀﾆﾈﾌﾔﾀﾘﾂﾔﾘﾌﾀﾆﾌﾄﾂﾋﾜﾉﾐﾈﾂﾂﾋﾄﾀﾏﾁﾜﾃﾌﾄﾂﾄﾀﾘﾋﾠﾏﾁﾀﾀﾏﾀﾇﾅﾄﾃﾀﾘﾆﾘﾄﾂﾊﾂﾅﾈﾂﾕﾜﾓﾘﾆﾊﾂﾜﾊﾃﾀﾍﾌﾜﾛﾕﾊ0123456789:・\"'.,-ﾞﾟ";
+    // ASCII uppercase charset from rain.rs
+    let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     // Load font
     let font_data = std::fs::read(font_path).expect("Failed to read font file");
@@ -37,6 +37,8 @@ fn main() {
     let mut current_x = PADDING;
     let mut current_y = PADDING;
     let mut glyph_count = 0;
+    let mut failed_count = 0;
+    let mut failed_chars = Vec::new();
 
     for ch in charset.chars() {
         // Check if we need to move to next row
@@ -83,15 +85,19 @@ fn main() {
             }
 
             glyph_count += 1;
+
+            // Store glyph metrics (normalized UV coordinates) - ONLY for successfully rasterized glyphs
+            let u_min = current_x as f32 / ATLAS_WIDTH as f32;
+            let v_min = current_y as f32 / ATLAS_HEIGHT as f32;
+            let u_max = (current_x + GLYPH_SIZE) as f32 / ATLAS_WIDTH as f32;
+            let v_max = (current_y + GLYPH_SIZE) as f32 / ATLAS_HEIGHT as f32;
+
+            glyph_map.insert(ch, (u_min, v_min, u_max, v_max));
+        } else {
+            // Character failed to rasterize
+            failed_count += 1;
+            failed_chars.push(ch);
         }
-
-        // Store glyph metrics (normalized UV coordinates)
-        let u_min = current_x as f32 / ATLAS_WIDTH as f32;
-        let v_min = current_y as f32 / ATLAS_HEIGHT as f32;
-        let u_max = (current_x + GLYPH_SIZE) as f32 / ATLAS_WIDTH as f32;
-        let v_max = (current_y + GLYPH_SIZE) as f32 / ATLAS_HEIGHT as f32;
-
-        glyph_map.insert(ch, (u_min, v_min, u_max, v_max));
 
         current_x += GLYPH_SIZE + PADDING;
     }
@@ -152,4 +158,13 @@ fn main() {
     let mut file = File::create(&atlas_path).expect("Failed to create output file");
     file.write_all(output.as_bytes())
         .expect("Failed to write output file");
+
+    // Print summary
+    println!("cargo:warning=Font atlas generated: {} glyphs successfully rasterized", glyph_count);
+    if failed_count > 0 {
+        println!("cargo:warning=WARNING: {} glyphs failed to rasterize:", failed_count);
+        for ch in &failed_chars {
+            println!("cargo:warning=  - '{}' (U+{:04X})", ch, *ch as u32);
+        }
+    }
 }
