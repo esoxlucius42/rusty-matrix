@@ -6,12 +6,12 @@ use std::io::Write;
 use std::path::Path;
 
 fn main() {
-    let font_path = "font/matrix code nfi.ttf";
+    let font_path = "font/PleckJP-Regular.ttf";
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let atlas_path = Path::new(&out_dir).join("font_atlas.rs");
 
-    // ASCII uppercase charset from rain.rs
-    let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    // Half-width katakana A-Z charset from rain.rs
+    let charset = "ﾊﾐﾋｰｳﾆｻﾓﾗﾔﾏﾁﾜﾂｦﾘﾅﾎﾈﾌﾛﾇﾍﾑﾀﾄ";
 
     // Load font
     let font_data = std::fs::read(font_path).expect("Failed to read font file");
