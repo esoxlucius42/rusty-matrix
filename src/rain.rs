@@ -100,19 +100,12 @@ impl RainSimulation {
     }
 
     fn animate_glyphs(&mut self) {
-        // Animate glyphs every 12 frames (5x per second at 60 FPS)
-        if self.frame_count - self.last_animation_frame >= 12 {
+        // Update head glyph every 5 frames (12x per second at 60 FPS)
+        if self.frame_count - self.last_animation_frame >= 5 {
             self.last_animation_frame = self.frame_count;
 
-            // Animate all raindrops
+            // Update only the head glyph (position 0) for each raindrop
             for raindrop in &mut self.raindrops {
-                // Shift glyphs down: move each glyph to the next position
-                // Iterate backwards to avoid overwriting values we need
-                for i in (1..raindrop.char_count).rev() {
-                    raindrop.chars[i] = raindrop.chars[i - 1];
-                }
-
-                // Generate new random glyph at head (position 0)
                 if raindrop.char_count > 0 {
                     let char_idx = self.rng.gen_range(0..self.charset.len());
                     raindrop.chars[0] = self.charset[char_idx];
