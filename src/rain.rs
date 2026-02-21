@@ -80,7 +80,7 @@ impl RainSimulation {
 
         self.raindrops.push(Raindrop {
             x,
-            y: -(self.height as i32 * 2),
+            y: -(self.height as i32),
             length,
             speed,
             chars,
@@ -99,9 +99,9 @@ impl RainSimulation {
 
         // Recycle raindrops that exit bottom of screen (not removal)
         for raindrop in &mut self.raindrops {
-            if raindrop.y > self.height as i32 {
+            if raindrop.y > (self.height as i32 * 2) {
                 // Recycle: reset to top of virtual area and randomize
-                raindrop.y = -(self.height as i32 * 2);
+                raindrop.y = -(self.height as i32);
                 raindrop.x = self.rng.gen_range(0..self.width);
                 regenerate_chars(raindrop, &self.charset, &mut self.rng);
             }
